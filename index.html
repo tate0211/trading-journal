@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Trading Journal</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <!-- Installable app (Add to Home Screen on iPhone, Install in Chrome) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Journal">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#121211">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="brand">Trading Journal<small>Discipline over outcome</small></div>
+      <nav class="top" aria-label="Main">
+        <button data-go="dashboard">Dashboard</button>
+        <button data-go="trades">Trades</button>
+        <button data-go="journal">Daily journal</button>
+        <button data-go="todo">To-do</button>
+        <button data-go="weekly">Weekly review</button>
+        <button data-go="calendar">Calendar</button>
+        <button data-go="news">News</button>
+      </nav>
+      <div class="top-controls">
+        <button class="sync-pill" id="sync-pill" hidden></button>
+        <div class="seg acct-switch" id="acct" role="tablist" aria-label="Account">
+          <button data-acct="live" role="tab">Real money</button>
+          <button data-acct="paper" role="tab">Paper</button>
+        </div>
+        <select id="mkt" aria-label="Markets">
+          <option value="all">All markets</option>
+          <option value="forex">Forex</option>
+          <option value="stocks">Stocks &amp; options</option>
+          <option value="indices">Indices &amp; futures</option>
+        </select>
+        <button class="btn primary" id="top-log">+ Log trade</button>
+      </div>
+    </div>
+    <div id="acct-banner" class="acct-banner" hidden>Paper trading: simulated money. These trades are kept separate from your real-money stats.</div>
+  </header>
+  <div class="app">
+    <nav class="side" aria-label="Tools">
+      <div class="side-label">Tools</div>
+      <button data-go="rules">Rules and mistakes</button>
+      <button data-go="notes">GoodNotes</button>
+      <button data-go="coach">AI coach</button>
+      <div class="spacer"></div>
+      <button data-go="settings">Settings</button>
+    </nav>
+    <div class="content">
+      <main id="main"></main>
+    </div>
+  </div>
+  <script src="db.js"></script>
+  <script src="charts.js"></script>
+  <script src="coach.js"></script>
+  <script src="notes.js"></script>
+  <script src="calendar.js"></script>
+  <script src="news.js"></script>
+  <script src="todo.js"></script>
+  <script src="sync.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f2a44"/>
+      <stop offset="1" stop-color="#0c1220"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#3987e5"/>
+      <stop offset="1" stop-color="#7fb5f2"/>
+    </linearGradient>
+  </defs>
+  <!-- macOS-style rounded square -->
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <!-- journal page lines -->
+  <g stroke="#ffffff" stroke-opacity=".07" stroke-width="10">
+    <line x1="170" y1="330" x2="854" y2="330"/>
+    <line x1="170" y1="470" x2="854" y2="470"/>
+    <line x1="170" y1="610" x2="854" y2="610"/>
+    <line x1="170" y1="750" x2="854" y2="750"/>
+  </g>
+  <!-- candlesticks: red, green, red, green, green -->
+  <g stroke-width="14" stroke-linecap="round">
+    <line x1="260" y1="520" x2="260" y2="760" stroke="#e66767"/>
+    <rect x="222" y="560" width="76" height="150" rx="12" fill="#e66767"/>
+    <line x1="390" y1="470" x2="390" y2="720" stroke="#34c759"/>
+    <rect x="352" y="510" width="76" height="170" rx="12" fill="#34c759"/>
+    <line x1="520" y1="500" x2="520" y2="700" stroke="#e66767"/>
+    <rect x="482" y="540" width="76" height="110" rx="12" fill="#e66767"/>
+    <line x1="650" y1="360" x2="650" y2="640" stroke="#34c759"/>
+    <rect x="612" y="400" width="76" height="200" rx="12" fill="#34c759"/>
+    <line x1="780" y1="250" x2="780" y2="520" stroke="#34c759"/>
+    <rect x="742" y="290" width="76" height="190" rx="12" fill="#34c759"/>
+  </g>
+  <!-- rising equity line -->
+  <polyline points="190,700 330,600 470,640 610,470 800,250" fill="none" stroke="url(#line)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="800" cy="250" r="34" fill="#ffffff"/>
+</svg>
