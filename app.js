@@ -235,10 +235,10 @@ async function load() {
   applyTheme(); applyAccount();
 }
 function applyAccount() {
-  $$('#acct button').forEach((b) => b.classList.toggle('on', b.dataset.acct === S.account));
+  $$('#acct button, #acct-m button').forEach((b) => b.classList.toggle('on', b.dataset.acct === S.account));
   document.body.classList.toggle('paper', S.account === 'paper');
   $('#acct-banner').hidden = S.account !== 'paper';
-  $('#mkt').value = S.marketGroup;
+  $('#mkt').value = $('#mkt-m').value = S.marketGroup;
 }
 async function setMarketGroup(g) {
   S.marketGroup = g; await DB.setMeta('marketGroup', g); applyAccount();
@@ -261,7 +261,11 @@ function go(view, arg) { location.hash = arg ? `${view}/${arg}` : view; }
 function route() {
   const [view, arg] = (location.hash.slice(1) || 'dashboard').split('/');
   const fn = VIEWS[view] || viewDashboard;
-  $$('nav [data-go]').forEach((b) => b.classList.toggle('active', b.dataset.go === (view === 'trade' ? 'trades' : view)));
+  const current = view === 'trade' ? 'trades' : view || 'dashboard';
+  $$('nav [data-go], .sheet-list [data-go]').forEach((b) => b.classList.toggle('active', b.dataset.go === current));
+  // On phones, pages reached through "More" light up the More tab.
+  $('#tab-more')?.classList.toggle('active', !!$(`.sheet-list [data-go="${current}"]`));
+  if (typeof moreSheet === 'function') moreSheet(false);
   window.scrollTo(0, 0);
   fn(arg ? decodeURIComponent(arg) : undefined);
 }
@@ -413,7 +417,7 @@ function tradeTable(trades, compact = false, grouped = false) {
       body += d.trades.map((t) => tradeRow(t, false, true)).join('');
     }
   } else body = trades.map((t) => tradeRow(t, compact)).join('');
-  return `<div class="table-wrap"><table><thead><tr>
+  return `<div class="table-wrap"><table class="trade-table ${compact ? '' : 'full'}"><thead><tr>
     <th>${grouped ? 'Time' : 'Date'}</th><th>Instrument</th>${compact ? '' : '<th>Setup</th>'}<th class="num">R</th><th class="num">P&amp;L</th><th>Rules</th>${compact ? '' : '<th>Mistakes</th><th>Grade</th>'}
   </tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -1236,10 +1240,15 @@ function renderSyncPill(st) {
 
 // ---------- start ----------
 window.addEventListener('hashchange', route);
-document.addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
-$$('#acct button').forEach((b) => (b.onclick = () => setAccount(b.dataset.acct)));
-$('#mkt').onchange = (e) => setMarketGroup(e.target.value);
-$('#top-log').onclick = () => go('trade', 'new');
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (b) { moreSheet(false); go(b.dataset.go); } });
+$$('#acct button, #acct-m button').forEach((b) => (b.onclick = () => setAccount(b.dataset.acct)));
+$('#mkt').onchange = $('#mkt-m').onchange = (e) => setMarketGroup(e.target.value);
+$('#top-log').onclick = $('#tab-log').onclick = () => go('trade', 'new');
+// Phone "More" sheet.
+const moreSheet = (open) => { $('#more-sheet').hidden = !open; document.body.classList.toggle('sheet-open', open); };
+$('#tab-more').onclick = () => moreSheet($('#more-sheet').hidden);
+$('[data-close-sheet]').onclick = () => moreSheet(false);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#more-sheet').hidden) moreSheet(false); });
 $('#sync-pill').onclick = () => go('settings');
 load().then(async () => {
   route();

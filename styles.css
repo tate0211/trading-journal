@@ -524,3 +524,101 @@ main { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .todo-add:has(.ta-text) { flex-wrap: wrap; }
 .todo-add .ta-text { flex: 1 1 100%; }
 .todo-add .ta-tag { flex: 1; }
+
+/* =====================================================================
+   Phone layout (iPhone and narrow windows): bottom tab bar + "More" sheet
+   ===================================================================== */
+.tabbar, .sheet { display: none; }
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+@media (max-width: 700px) {
+  /* slim top bar: name, Real/Paper, sync dot */
+  nav.side, nav.top, #mkt, #top-log, .topbar .brand small { display: none; }
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .topbar-row { flex-wrap: nowrap; min-height: 52px; padding: 6px 14px; gap: 10px; }
+  .topbar .brand { font-size: 16px; }
+  .top-controls { flex-basis: auto; flex-wrap: nowrap; margin-left: auto; gap: 8px; }
+  .sync-pill { font-size: 0; padding: 7px; line-height: 0; }
+  .sync-pill::before { margin: 0; width: 9px; height: 9px; }
+  .topbar .acct-switch button { padding: 7px 11px; font-size: 13px; }
+  .acct-banner, .topbar .acct-banner { padding: 6px 14px; font-size: 12px; }
+  main { padding: 16px 14px calc(100px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 20px; }
+
+  /* bottom tab bar */
+  .tabbar {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+    justify-content: space-around; align-items: flex-end;
+    background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border); padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tabbar button {
+    flex: 1; min-height: 48px; background: none; border: 0; color: var(--muted); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px;
+  }
+  .tabbar svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .tabbar button.active { color: var(--accent); }
+  .tabbar .tab-log {
+    flex: 0 0 56px; height: 56px; min-height: 0; border-radius: 50%; margin: -24px 6px 0; color: #fff;
+    background: var(--accent); box-shadow: 0 6px 16px rgba(0, 0, 0, .35);
+  }
+  .tabbar .tab-log svg { width: 28px; height: 28px; stroke-width: 2.4; }
+
+  /* "More" sheet */
+  .sheet:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 60; }
+  .sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .5); }
+  .sheet-panel {
+    position: absolute; left: 0; right: 0; bottom: 0; max-height: 85vh; overflow-y: auto;
+    background: var(--surface); border-radius: 18px 18px 0 0; border-top: 1px solid var(--border);
+    padding: 8px 16px calc(18px + env(safe-area-inset-bottom)); animation: sheet-up .2s ease-out;
+  }
+  .sheet-grab { width: 40px; height: 5px; border-radius: 3px; background: var(--border); margin: 4px auto 14px; }
+  .sheet-controls { display: flex; gap: 8px; margin-bottom: 14px; }
+  .sheet-controls .seg { flex: 1; display: flex; }
+  .sheet-controls .seg button { flex: 1; padding: 10px 6px; }
+  .sheet-controls .seg button[data-acct="live"].on { background: var(--good); color: #fff; }
+  .sheet-controls .seg button[data-acct="paper"].on { background: var(--paper); color: #fff; }
+  .sheet-controls select { flex: 1; width: auto; }
+  .sheet-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sheet-list button {
+    min-height: 54px; text-align: left; padding: 12px 14px; font-size: 15px; font-weight: 500;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text); cursor: pointer;
+  }
+  .sheet-list button.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  body.sheet-open { overflow: hidden; }
+
+  /* bigger touch targets */
+  .btn { min-height: 42px; }
+  .btn.small { min-height: 36px; padding: 6px 12px; }
+  .chip { padding: 7px 13px; }
+  .todo-item { padding: 10px 12px; }
+  .todo-item input[type=checkbox] { width: 24px; height: 24px; }
+  .todo-item .todo-actions { opacity: 1; }
+  .todo-actions button { padding: 6px 9px; font-size: 15px; }
+
+  /* stat tiles two per row, other grids one per row */
+  .grid.g4 { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid.g2, .grid.g3 { grid-template-columns: minmax(0, 1fr); }
+  .stat .value { font-size: 20px; }
+  .card { padding: 14px; }
+
+  /* trade lists: keep time, instrument, R and P&L (tags stay under the instrument) */
+  .trade-table.full th:nth-child(3), .trade-table.full td:nth-child(3),
+  .trade-table.full th:nth-child(n+6), .trade-table.full td:nth-child(n+6) { display: none; }
+  th, td { padding: 8px 6px; }
+
+  /* trade form: compact summary with Save, pinned just above the tab bar */
+  .form-side { position: sticky; top: auto; bottom: calc(74px + env(safe-area-inset-bottom)); z-index: 5; }
+  .summary { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px; padding: 10px 14px; box-shadow: 0 -6px 20px rgba(0, 0, 0, .25); }
+  .summary > .muted:first-child, .summary dl, .summary .meter, #cancel { display: none; }
+  .summary .sum-title { font-size: 14px; margin: 0; grid-column: 1; }
+  .summary .sum-r { font-size: 22px; margin: 0; grid-column: 1; }
+  #sum-pnl { grid-column: 1; font-size: 13px; }
+  .summary #save { grid-column: 2; grid-row: 1 / span 3; width: auto !important; margin: 0 !important; padding: 0 20px; min-height: 48px; }
+  #sum-warn { grid-column: 1 / -1; }
+  #sum-warn .warn { margin-top: 4px; }
+  .summary > .row { grid-column: 1 / -1; margin-top: 4px !important; }
+  .summary > .row:not(:has(#del)) { display: none; }
+}
+@media (max-width: 700px) { #new-trade { display: none; } } /* the ＋ tab does this on phones */
+@media (max-width: 700px) { .sheet-controls .seg button { white-space: nowrap; font-size: 14px; } }
