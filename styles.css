@@ -646,3 +646,23 @@ main { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
   padding: 8px 16px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
 }
 .update-banner .btn { background: #fff; color: var(--accent); border-color: #fff; }
+
+/* ---- to-do colour coding: stripe per category, colour-coded section chips ---- */
+.todo-simple .todo-item.has-cat { border-left: 4px solid var(--cat); }
+.todo-simple .todo-item .cat-chip { margin-left: auto; }
+.todo-simple .todo-item .todo-time + .cat-chip { margin-left: 0; }
+.cat-filter { margin-bottom: 14px; max-width: 760px; }
+.cat-filter .chip { display: inline-flex; align-items: center; gap: 2px; font: inherit; font-size: 13px; color: var(--text); }
+.cat-filter .chip.on { background: var(--cat, var(--accent)); border-color: var(--cat, var(--accent)); color: #fff; }
+.cat-filter .chip.on .dot { background: #fff !important; }
+.cat-filter .count {
+  margin-left: 6px; min-width: 18px; padding: 0 5px; border-radius: 999px; font-size: 11px; font-weight: 600; text-align: center;
+  background: var(--surface-2); color: var(--text-2);
+}
+.cat-filter .chip.on .count { background: rgba(255, 255, 255, .25); color: #fff; }
+.todo-add.simple .ta-tag { flex: 0 0 auto; width: auto; max-width: 40%; }
+@media (max-width: 520px) {
+  .todo-add.simple { flex-wrap: wrap; }
+  .todo-add.simple .ta-text { flex: 1 1 100%; }
+  .todo-add.simple .ta-tag { flex: 1; max-width: none; }
+}

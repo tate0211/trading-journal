@@ -123,10 +123,10 @@ function itemEditForm(i, attrs) {
 function itemRow(i, date, idx, len, editing) {
   if (todoEdit?.kind === 'item' && todoEdit.date === date && todoEdit.id === i.id) return itemEditForm(i, `data-date="${date}" data-id="${i.id}"`);
   const a = `data-date="${date}" data-id="${i.id}"`;
-  return `<li class="todo-item ${i.done ? 'done' : ''}">
+  return `<li class="todo-item ${i.done ? 'done' : ''} ${i.tag ? 'has-cat' : ''}" style="--cat:${catColor(i.tag)}">
     <label><input type="checkbox" data-check ${a} ${i.done ? 'checked' : ''}><span class="todo-text">${esc(i.text)}</span></label>
-    ${i.time ? `<span class="todo-time">${esc(i.time)}</span>` : ''}
-    ${editing ? `${catChip(i.tag)}<span class="todo-actions">
+    ${i.time ? `<span class="todo-time">${esc(i.time)}</span>` : ''}${catChip(i.tag)}
+    ${editing ? `<span class="todo-actions">
       <button data-act="edit" ${a} title="Edit" aria-label="Edit">✎</button>
       <button data-act="up" ${a} ${idx ? '' : 'disabled'} title="Move up" aria-label="Move up">↑</button>
       <button data-act="down" ${a} ${idx < len - 1 ? '' : 'disabled'} title="Move down" aria-label="Move down">↓</button>
@@ -159,7 +159,12 @@ async function viewTodo(arg) {
   const which = sessionStorage.getItem('todoDay') === 'tomorrow' ? 'tomorrow' : 'today';
   const d = which === 'tomorrow' ? t1 : t0;
   const editing = sessionStorage.getItem('todoEditing') === '1';
-  const items = todoList(d);
+  const all = todoList(d);
+  // Colour-coded category filter: show one section at a time (remembered for this session).
+  let filter = sessionStorage.getItem('todoFilter') || '';
+  if (filter && !S.todoCats.some((c) => c.name === filter)) filter = '';
+  const items = filter ? all.filter((i) => i.tag === filter) : all;
+  const countOf = (name) => all.filter((i) => i.tag === name && !i.done).length;
   const done = items.filter((i) => i.done).length;
   const left = items.length - done;
   const dateLabel = (x) => new Date(x + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -171,14 +176,19 @@ async function viewTodo(arg) {
       <button role="tab" data-act="day" data-day="today" class="${which === 'today' ? 'on' : ''}" aria-selected="${which === 'today'}">Today<small>${dateLabel(t0)}</small></button>
       <button role="tab" data-act="day" data-day="tomorrow" class="${which === 'tomorrow' ? 'on' : ''}" aria-selected="${which === 'tomorrow'}">Tomorrow<small>${dateLabel(t1)}</small></button>
     </div>
+    <div class="chips cat-filter" aria-label="Categories">
+      <button class="chip ${filter ? '' : 'on'}" data-act="filter" data-filter="">All<span class="count">${all.filter((i) => !i.done).length}</span></button>
+      ${S.todoCats.map((c) => `<button class="chip ${filter === c.name ? 'on' : ''}" data-act="filter" data-filter="${esc(c.name)}" style="--cat:${c.color}"><i class="dot" style="background:${c.color}"></i>${esc(c.name)}${countOf(c.name) ? `<span class="count">${countOf(c.name)}</span>` : ''}</button>`).join('')}
+    </div>
 
     <div class="card todo-card" data-card="${d}">
-      <div class="row between"><b>${items.length ? (left ? `${left} left` : 'All done ✓') : 'Nothing on the list'}</b>
+      <div class="row between"><b>${filter ? `<i class="dot" style="background:${catColor(filter)}"></i>${esc(filter)}: ` : ''}${items.length ? (left ? `${left} left` : 'All done ✓') : 'Nothing here yet'}</b>
         <span class="muted" style="font-size:13px">${items.length ? `${done} of ${items.length} done` : ''}</span></div>
       ${items.length ? `<div class="meter" style="margin:10px 0 14px"><div style="width:${(done / items.length) * 100}%"></div></div>` : '<div style="height:12px"></div>'}
-      <ul class="todo-items">${items.map((i, n) => itemRow(i, d, n, items.length, editing)).join('')}</ul>
+      <ul class="todo-items">${items.map((i) => itemRow(i, d, all.indexOf(i), all.length, editing)).join('')}</ul>
       <div class="todo-add simple" data-date="${d}">
         <input type="text" class="ta-text" placeholder="Add something for ${which}…" aria-label="New item">
+        <select class="ta-tag" aria-label="Category">${S.todoCats.map((c) => `<option ${c.name === (filter || 'Personal') ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
         <button class="btn primary" data-act="add" data-date="${d}">Add</button>
       </div>
       ${editing ? `<div class="row" style="margin-top:12px;gap:8px">
@@ -263,11 +273,12 @@ async function viewTodo(arg) {
     const { act, date: dt, id } = b.dataset;
     switch (act) {
       case 'day': sessionStorage.setItem('todoDay', b.dataset.day); todoEdit = null; return rerender();
+      case 'filter': sessionStorage.setItem('todoFilter', b.dataset.filter); return rerender();
       case 'toggle-edit': sessionStorage.setItem('todoEditing', editing ? '' : '1'); todoEdit = null; return rerender();
       case 'add': {
         const box = b.closest('.todo-add'), text = $('.ta-text', box).value.trim();
         if (!text) return $('.ta-text', box).focus();
-        list(dt).push({ id: uid(), text, tag: '', time: '', note: '', done: false });
+        list(dt).push({ id: uid(), text, tag: $('.ta-tag', box)?.value || '', time: '', note: '', done: false });
         await saveTodos(dt); return rerender('.todo-add.simple .ta-text');
       }
       case 'edit': todoEdit = { kind: 'item', date: dt, id }; await rerender(); return $('.todo-edit .te-text')?.focus();

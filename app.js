@@ -1247,7 +1247,7 @@ function renderSyncPill(st) {
 // ---------- app updates ----------
 // Bump APP_VERSION (and version.json, and the ?v= in index.html) with every release. The installed app compares
 // itself to version.json, which is always fetched fresh, and offers a one-tap update that clears the saved copy.
-const APP_VERSION = '2026-09-30.3';
+const APP_VERSION = '2026-09-30.4';
 async function checkForUpdate(manual = false) {
   if (location.protocol !== 'https:') { if (manual) toast('Updates apply to the online app only'); return; }
   try {
