@@ -622,3 +622,20 @@ main { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 700px) { #new-trade { display: none; } } /* the ＋ tab does this on phones */
 @media (max-width: 700px) { .sheet-controls .seg button { white-space: nowrap; font-size: 14px; } }
+
+/* ---- simple To-do: Today / Tomorrow switch and a big checklist ---- */
+.day-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.day-switch button {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 10px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text-2);
+  font-size: 17px; font-weight: 650;
+}
+.day-switch button small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.day-switch button:hover { background: var(--surface-2); color: var(--text); }
+.day-switch button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.day-switch button.on small { color: rgba(255, 255, 255, .85); }
+.todo-simple .todo-card, .todo-simple .day-switch, .todo-simple > .row.between { max-width: 760px; }
+.todo-simple .todo-item { padding: 12px 14px; font-size: 16px; }
+.todo-simple .todo-item input[type=checkbox] { width: 22px; height: 22px; }
+.todo-add.simple { flex-wrap: nowrap; }
+.todo-add.simple .ta-text { flex: 1 1 auto; }

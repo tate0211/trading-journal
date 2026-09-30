@@ -1,17 +1,26 @@
-// To-do lists: one checklist per day, your own categories, and a routine that repeats on the days you choose.
+// To-do: a simple Today / Tomorrow checklist. Your routine is added to each new day automatically;
+// categories, repeat days, reordering and deleting live behind "Edit list".
 // Stored in meta:
 //   'todo:YYYY-MM-DD' = [{ id, text, tag, time, note, done, routine }]   (one record per day; tag = category name)
 //   'todoRoutine' = [{ id, text, tag, time, days }]   (days: 0=Mon … 6=Sun; empty = every day)
 //   'todoCats'    = [{ id, name, color }]
+//   'todoRoutineVersion' = which built-in routine this journal has been moved to
 
 const TODO_COLORS = ['#3987e5', '#1baf7a', '#7b6fd6', '#e87ba4', '#eb6834', '#2f9e44', '#eda100', '#e34948'];
-const DEFAULT_CATS = [['Pre-market', 0], ['Trading', 5], ['Review', 2], ['Personal', 3], ['Health', 1], ['Family', 4]];
+const DEFAULT_CATS = [['Personal', 3], ['Health', 1], ['Study', 2], ['Trading', 5], ['Family', 4], ['Pre-market', 0]];
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const DEFAULT_ROUTINE = [
-  { text: 'Check the forex calendar for high-impact news', tag: 'Pre-market', time: '', days: [] },
-  { text: 'Write my pre-market plan', tag: 'Pre-market', time: '', days: [] },
-  { text: 'Journal every trade and review it', tag: 'Review', time: '', days: [] },
+const MY_ROUTINE = [
+  { text: 'Read a book', tag: 'Personal', days: [] },
+  { text: 'Take creatine', tag: 'Health', days: [] },
+  { text: 'Check emails', tag: 'Personal', days: [] },
+  { text: 'Check assignments', tag: 'Study', days: [] },
+  { text: 'Study for upcoming exams', tag: 'Study', days: [] },
+  { text: 'Check trades', tag: 'Trading', days: [] },
+  { text: 'Check in with the family', tag: 'Family', days: [] },
+  { text: 'Do laundry', tag: 'Personal', days: [2, 6] }, // Wednesdays and Sundays
 ];
+const ROUTINE_VERSION = 2;
+const OLD_STARTER_ITEMS = ['Check the forex calendar for high-impact news', 'Write my pre-market plan', 'Journal every trade and review it'];
 let todoEdit = null; // { kind: 'item', date, id } or { kind: 'routine', id } while an edit form is open
 
 async function loadTodos() {
@@ -28,9 +37,40 @@ async function loadTodos() {
   }
   if (!S.todoRoutine) {
     S.todoRoutine = await DB.getMeta('todoRoutine', null);
-    if (!S.todoRoutine) { S.todoRoutine = DEFAULT_ROUTINE.map((r) => ({ id: uid(), ...r })); await DB.seedMeta('todoRoutine', S.todoRoutine); }
+    const version = await DB.getMeta('todoRoutineVersion', S.todoRoutine ? 1 : ROUTINE_VERSION);
+    if (!S.todoRoutine) {
+      S.todoRoutine = routineFrom(MY_ROUTINE);
+      await DB.seedMeta('todoRoutine', S.todoRoutine);
+      await DB.seedMeta('todoRoutineVersion', ROUTINE_VERSION);
+    }
+    else if (version < ROUTINE_VERSION) await switchToMyRoutine();
   }
 }
+const routineFrom = (list) => list.map((r) => ({ id: uid(), time: '', ...r }));
+
+// One-time move from the old three trading starter items to your personal routine.
+// Today's and future lists get the new items; anything already ticked is kept.
+async function switchToMyRoutine() {
+  S.todoRoutine = routineFrom(MY_ROUTINE);
+  await saveRoutine();
+  if (!S.todoCats.some((c) => c.name === 'Study')) {
+    const used = new Set(S.todoCats.map((c) => c.color));
+    S.todoCats.push({ id: uid(), name: 'Study', color: TODO_COLORS.find((c) => !used.has(c)) || TODO_COLORS[2] });
+    await saveCats();
+  }
+  for (const d of Object.keys(S.todos)) {
+    if (d < today()) continue;
+    const others = S.todos[d].filter((i) => !(OLD_STARTER_ITEMS.includes(i.text) && !i.done) && !S.todoRoutine.some((r) => r.text === i.text));
+    const fromRoutine = S.todoRoutine.filter((r) => routineApplies(r, d)).map((r) => {
+      const existing = S.todos[d].find((i) => i.text === r.text);
+      return existing || { id: uid(), text: r.text, tag: r.tag, time: '', note: '', done: false, routine: true };
+    });
+    S.todos[d] = [...fromRoutine, ...others];
+    await saveTodos(d);
+  }
+  await DB.setMeta('todoRoutineVersion', ROUTINE_VERSION);
+}
+
 // One record per day ('todo:YYYY-MM-DD') so edits to different days never overwrite each other when syncing.
 // With no date, every day is saved (only needed after renaming or deleting a category).
 const saveTodos = (date) => (date ? DB.setMeta('todo:' + date, S.todos[date] || [])
@@ -75,49 +115,25 @@ function itemEditForm(i, attrs) {
     <select class="te-tag" aria-label="Category">${catOptions(i.tag)}</select>
     <input type="time" class="te-time" value="${esc(i.time || '')}" aria-label="Time (optional)">
     <input type="text" class="te-note" value="${esc(i.note || '')}" placeholder="Note (optional)" aria-label="Note">
-    ${'days' in i ? `<div class="day-picks">${DAY_NAMES.map((n, d) => `<label><input type="checkbox" class="te-day" value="${d}" ${i.days?.includes(d) ? 'checked' : ''}>${n}</label>`).join('')}<span class="hint">None ticked = every day</span></div>` : ''}
+    ${'days' in i ? `<div class="day-picks"><span class="hint" style="flex-basis:100%">Repeat on (none ticked = every day):</span>${DAY_NAMES.map((n, d) => `<label><input type="checkbox" class="te-day" value="${d}" ${i.days?.includes(d) ? 'checked' : ''}>${n}</label>`).join('')}</div>` : ''}
     <div class="row" style="gap:6px"><button class="btn small primary" data-act="save">Save</button><button class="btn small" data-act="cancel">Cancel</button></div>
   </div></li>`;
 }
 
-function itemRow(i, date, idx, len) {
+function itemRow(i, date, idx, len, editing) {
   if (todoEdit?.kind === 'item' && todoEdit.date === date && todoEdit.id === i.id) return itemEditForm(i, `data-date="${date}" data-id="${i.id}"`);
   const a = `data-date="${date}" data-id="${i.id}"`;
   return `<li class="todo-item ${i.done ? 'done' : ''}">
     <label><input type="checkbox" data-check ${a} ${i.done ? 'checked' : ''}><span class="todo-text">${esc(i.text)}</span></label>
-    ${i.time ? `<span class="todo-time">${esc(i.time)}</span>` : ''}${catChip(i.tag)}
-    <span class="todo-actions">
+    ${i.time ? `<span class="todo-time">${esc(i.time)}</span>` : ''}
+    ${editing ? `${catChip(i.tag)}<span class="todo-actions">
       <button data-act="edit" ${a} title="Edit" aria-label="Edit">✎</button>
       <button data-act="up" ${a} ${idx ? '' : 'disabled'} title="Move up" aria-label="Move up">↑</button>
       <button data-act="down" ${a} ${idx < len - 1 ? '' : 'disabled'} title="Move down" aria-label="Move down">↓</button>
       <button data-act="del" ${a} class="danger" title="Delete" aria-label="Delete">✕</button>
-    </span>
+    </span>` : ''}
     ${i.note ? `<div class="todo-note">${esc(i.note)}</div>` : ''}
   </li>`;
-}
-
-function todoCard(date, filter) {
-  const all = todoList(date);
-  const items = filter ? all.filter((i) => i.tag === filter) : all;
-  const done = items.filter((i) => i.done).length;
-  return `<div class="card todo-card" data-card="${date}">
-    <div class="row between"><div><h2 style="margin:0">${dayLabel(date)}</h2><span class="muted" style="font-size:13px">${fmtDate(date)}${filter ? ` · ${esc(filter)} only` : ''}</span></div>
-      <span class="muted" style="font-size:13px">${items.length ? `${done} of ${items.length} done` : ''}</span></div>
-    ${items.length ? `<div class="meter" style="margin:10px 0 12px"><div style="width:${(done / items.length) * 100}%"></div></div>` : '<div style="height:12px"></div>'}
-    <ul class="todo-items">${items.map((i) => itemRow(i, date, all.indexOf(i), all.length)).join('')
-      || `<li class="muted" style="list-style:none;padding:6px 0">${date < today() ? 'No list for this day.' : filter ? `No ${esc(filter)} items.` : 'Nothing yet. Add your first item below.'}</li>`}</ul>
-    <div class="todo-add" data-date="${date}">
-      <input type="text" class="ta-text" placeholder="Add an item for ${dayLabel(date).toLowerCase()}…" aria-label="New item">
-      <select class="ta-tag" aria-label="Category">${catOptions(filter || '')}</select>
-      <input type="time" class="ta-time" aria-label="Time (optional)">
-      <button class="btn primary" data-act="add" data-date="${date}">Add</button>
-    </div>
-    <div class="row" style="margin-top:10px;gap:8px">
-      ${all.some((i) => !i.done) && date <= today() ? `<button class="btn small" data-act="carry" data-date="${date}">Move unfinished to next day</button>` : ''}
-      ${all.some((i) => i.time) ? `<button class="btn small" data-act="sort" data-date="${date}">Sort by time</button>` : ''}
-      ${all.some((i) => i.done) ? `<button class="btn small" data-act="clear" data-date="${date}">Clear done items</button>` : ''}
-    </div>
-  </div>`;
 }
 
 function routineRow(r, idx) {
@@ -135,31 +151,57 @@ function routineRow(r, idx) {
   </li>`;
 }
 
-async function viewTodo(date) {
+async function viewTodo(arg) {
   await loadTodos();
-  const d = /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date : today();
-  const next = addDays(d, 1);
-  let filter = sessionStorage.getItem('todoFilter') || '';
-  if (filter && !S.todoCats.some((c) => c.name === filter)) filter = '';
-  main().innerHTML = `<div id="todo-page">
-    <div class="row between"><div><h1>To-do</h1><p class="sub">Trading, personal life, anything. Plan tomorrow tonight, then tick it off as you go.</p></div>
-      <div class="row"><button class="btn" data-act="day" data-to="${addDays(d, -1)}" aria-label="Previous day">←</button><input type="date" id="td-date" value="${d}" style="width:auto">
-        <button class="btn" data-act="day" data-to="${next}" aria-label="Next day">→</button><button class="btn" data-act="day" data-to="${today()}">Today</button></div></div>
-    <div class="chips" style="margin-bottom:14px"><span class="chip ${filter ? '' : 'on'}" data-filter="">All</span>${S.todoCats.map((c) => `<span class="chip ${filter === c.name ? 'on' : ''}" data-filter="${esc(c.name)}"><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span>`).join('')}</div>
-    <div class="grid g2">${todoCard(d, filter)}${todoCard(next, filter)}</div>
+  const t0 = today(), t1 = addDays(t0, 1);
+  if (arg === t1 || arg === 'tomorrow') sessionStorage.setItem('todoDay', 'tomorrow');
+  else if (arg) sessionStorage.setItem('todoDay', 'today');
+  const which = sessionStorage.getItem('todoDay') === 'tomorrow' ? 'tomorrow' : 'today';
+  const d = which === 'tomorrow' ? t1 : t0;
+  const editing = sessionStorage.getItem('todoEditing') === '1';
+  const items = todoList(d);
+  const done = items.filter((i) => i.done).length;
+  const left = items.length - done;
+  const dateLabel = (x) => new Date(x + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+
+  main().innerHTML = `<div id="todo-page" class="todo-simple">
+    <div class="row between" style="margin-bottom:14px"><h1 style="margin:0">To-do</h1>
+      <button class="btn small ${editing ? 'primary' : ''}" data-act="toggle-edit">${editing ? 'Done editing' : 'Edit list'}</button></div>
+    <div class="day-switch" role="tablist" aria-label="Day">
+      <button role="tab" data-act="day" data-day="today" class="${which === 'today' ? 'on' : ''}" aria-selected="${which === 'today'}">Today<small>${dateLabel(t0)}</small></button>
+      <button role="tab" data-act="day" data-day="tomorrow" class="${which === 'tomorrow' ? 'on' : ''}" aria-selected="${which === 'tomorrow'}">Tomorrow<small>${dateLabel(t1)}</small></button>
+    </div>
+
+    <div class="card todo-card" data-card="${d}">
+      <div class="row between"><b>${items.length ? (left ? `${left} left` : 'All done ✓') : 'Nothing on the list'}</b>
+        <span class="muted" style="font-size:13px">${items.length ? `${done} of ${items.length} done` : ''}</span></div>
+      ${items.length ? `<div class="meter" style="margin:10px 0 14px"><div style="width:${(done / items.length) * 100}%"></div></div>` : '<div style="height:12px"></div>'}
+      <ul class="todo-items">${items.map((i, n) => itemRow(i, d, n, items.length, editing)).join('')}</ul>
+      <div class="todo-add simple" data-date="${d}">
+        <input type="text" class="ta-text" placeholder="Add something for ${which}…" aria-label="New item">
+        <button class="btn primary" data-act="add" data-date="${d}">Add</button>
+      </div>
+      ${editing ? `<div class="row" style="margin-top:12px;gap:8px">
+        ${which === 'today' && left ? `<button class="btn small" data-act="carry" data-date="${d}">Move unfinished to tomorrow</button>` : ''}
+        ${items.some((i) => i.time) ? `<button class="btn small" data-act="sort" data-date="${d}">Sort by time</button>` : ''}
+        ${done ? `<button class="btn small" data-act="clear" data-date="${d}">Clear done items</button>` : ''}
+      </div>` : ''}
+    </div>
+
+    ${editing ? `
     <div class="grid g2" style="margin-top:16px">
-      <div class="card"><h2>Routine</h2>
-        <p class="muted" style="margin-top:-6px;font-size:13px">Added automatically to each new day's list, on the days you choose. Edit an item (✎) to pick its days.</p>
+      <div class="card"><h2>Every day list</h2>
+        <p class="muted" style="margin-top:-6px;font-size:13px">These are added to each new day automatically. Tap ✎ to change an item or pick which days it repeats on.</p>
         <ul class="todo-items">${S.todoRoutine.map(routineRow).join('') || '<li class="muted" style="list-style:none">No routine items.</li>'}</ul>
         <div class="todo-add" data-routine-add>
-          <input type="text" class="ta-text" placeholder="e.g. Gym, call family, read 20 pages…" aria-label="New routine item">
+          <input type="text" class="ta-text" placeholder="Add to every day, e.g. Go to the gym" aria-label="New routine item">
           <select class="ta-tag" aria-label="Category">${catOptions('')}</select>
-          <input type="time" class="ta-time" aria-label="Time (optional)">
           <button class="btn" data-act="rt-add">Add</button>
         </div>
+        <p class="hint" style="margin:8px 0 0">Changes apply to days you haven't opened yet. Today and tomorrow are updated too.</p>
       </div>
       <div class="card"><h2>Categories</h2>
-        <p class="muted" style="margin-top:-6px;font-size:13px">Make your own: Gym, Family, Errands, Study… Rename by typing, click a colour to change it.</p>
+        <p class="muted" style="margin-top:-6px;font-size:13px">Rename by typing, tap a colour to change it.</p>
         <ul class="todo-items">${S.todoCats.map((c) => `<li class="todo-item">
           <i class="dot big" style="background:${c.color}"></i>
           <input type="text" class="cat-name" data-cat="${c.id}" value="${esc(c.name)}" aria-label="Category name">
@@ -167,10 +209,11 @@ async function viewTodo(date) {
           <button class="todo-del" data-act="cat-del" data-cat="${c.id}" aria-label="Delete category">✕</button></li>`).join('')}</ul>
         <div class="todo-add"><input type="text" id="cat-new" placeholder="New category, e.g. Gym"><button class="btn" data-act="cat-add">Add category</button></div>
       </div>
-    </div></div>`;
+    </div>` : ''}
+  </div>`;
 
   const page = $('#todo-page');
-  const rerender = async (focusSel) => { await viewTodo(d); if (focusSel) $(focusSel)?.focus(); };
+  const rerender = async (focusSel) => { await viewTodo(); if (focusSel) $(focusSel)?.focus(); };
   const list = (dt) => todoList(dt);
   const find = (dt, id) => list(dt).find((i) => i.id === id);
   const move = (arr, i, j) => { if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; };
@@ -178,18 +221,32 @@ async function viewTodo(date) {
     text: $('.te-text', form).value.trim(), tag: $('.te-tag', form).value, time: $('.te-time', form).value, note: $('.te-note', form).value.trim(),
     ...($('.te-day', form) ? { days: $$('.te-day:checked', form).map((x) => +x.value) } : {}),
   });
+  // A routine change also updates today's and tomorrow's lists (keeping anything already ticked).
+  const applyRoutineToOpenDays = async (oldText, r) => {
+    for (const dt of [t0, t1]) {
+      if (!S.todos[dt]) continue;
+      const arr = S.todos[dt], idx = arr.findIndex((i) => i.routine && i.text === (oldText ?? r?.text));
+      if (!r) { if (idx >= 0 && !arr[idx].done) arr.splice(idx, 1); }
+      else if (!routineApplies(r, dt)) { if (idx >= 0 && !arr[idx].done) arr.splice(idx, 1); }
+      else if (idx >= 0) Object.assign(arr[idx], { text: r.text, tag: r.tag, time: r.time || '' });
+      else arr.push({ id: uid(), text: r.text, tag: r.tag, time: r.time || '', note: '', done: false, routine: true });
+      await saveTodos(dt);
+    }
+  };
 
   page.addEventListener('change', async (e) => {
     const t = e.target;
-    if (t.matches('[data-check]')) { find(t.dataset.date, t.dataset.id).done = t.checked; await saveTodos(t.dataset.date); return rerender(); }
-    if (t.id === 'td-date' && t.value) return go('todo', t.value);
+    if (t.matches('[data-check]')) {
+      const it = find(t.dataset.date, t.dataset.id);
+      if (!it) return rerender(); // list changed underneath (e.g. a sync); just redraw
+      it.done = t.checked; await saveTodos(t.dataset.date); return rerender();
+    }
     if (t.matches('.cat-name')) {
       const cat = S.todoCats.find((c) => c.id === t.dataset.cat), name = t.value.trim();
       if (!name || S.todoCats.some((c) => c !== cat && c.name === name)) { t.value = cat.name; return toast('Use a different name'); }
       const old = cat.name; cat.name = name;
       for (const items of Object.values(S.todos)) items.forEach((i) => { if (i.tag === old) i.tag = name; });
       S.todoRoutine.forEach((r) => { if (r.tag === old) r.tag = name; });
-      if (sessionStorage.getItem('todoFilter') === old) sessionStorage.setItem('todoFilter', name);
       await Promise.all([saveCats(), saveTodos(), saveRoutine()]); toast('Category renamed'); return rerender();
     }
   });
@@ -202,47 +259,53 @@ async function viewTodo(date) {
   });
 
   page.addEventListener('click', async (e) => {
-    const chip = e.target.closest('[data-filter]');
-    if (chip) { sessionStorage.setItem('todoFilter', chip.dataset.filter); return rerender(); }
     const b = e.target.closest('[data-act]'); if (!b) return;
     const { act, date: dt, id } = b.dataset;
     switch (act) {
-      case 'day': return go('todo', b.dataset.to);
+      case 'day': sessionStorage.setItem('todoDay', b.dataset.day); todoEdit = null; return rerender();
+      case 'toggle-edit': sessionStorage.setItem('todoEditing', editing ? '' : '1'); todoEdit = null; return rerender();
       case 'add': {
         const box = b.closest('.todo-add'), text = $('.ta-text', box).value.trim();
         if (!text) return $('.ta-text', box).focus();
-        list(dt).push({ id: uid(), text, tag: $('.ta-tag', box).value, time: $('.ta-time', box).value, note: '', done: false });
-        await saveTodos(dt); return rerender(`[data-card="${dt}"] .ta-text`);
+        list(dt).push({ id: uid(), text, tag: '', time: '', note: '', done: false });
+        await saveTodos(dt); return rerender('.todo-add.simple .ta-text');
       }
       case 'edit': todoEdit = { kind: 'item', date: dt, id }; await rerender(); return $('.todo-edit .te-text')?.focus();
       case 'cancel': todoEdit = null; return rerender();
       case 'save': {
         const form = b.closest('.todo-edit'), v = readForm(form);
         if (!v.text) return $('.te-text', form).focus();
-        if (form.dataset.routine) Object.assign(S.todoRoutine.find((r) => r.id === form.dataset.routine), v), await saveRoutine();
-        else Object.assign(find(form.dataset.date, form.dataset.id), v), await saveTodos(form.dataset.date);
+        if (form.dataset.routine) {
+          const r = S.todoRoutine.find((x) => x.id === form.dataset.routine), oldText = r.text;
+          Object.assign(r, v); await saveRoutine(); await applyRoutineToOpenDays(oldText, r);
+        } else { Object.assign(find(form.dataset.date, form.dataset.id), v); await saveTodos(form.dataset.date); }
         todoEdit = null; return rerender();
       }
       case 'up': case 'down': { const arr = list(dt), i = arr.findIndex((x) => x.id === id); move(arr, i, act === 'up' ? i - 1 : i + 1); await saveTodos(dt); return rerender(); }
       case 'del': S.todos[dt] = list(dt).filter((i) => i.id !== id); await saveTodos(dt); return rerender();
-      case 'sort': list(dt).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')); await saveTodos(dt); return rerender();
+      case 'sort': list(dt).sort((a, b2) => (a.time || '99:99').localeCompare(b2.time || '99:99')); await saveTodos(dt); return rerender();
       case 'clear': S.todos[dt] = list(dt).filter((i) => !i.done); await saveTodos(dt); return rerender();
       case 'carry': {
         const nx = addDays(dt, 1), target = list(nx);
         const moving = list(dt).filter((i) => !i.done && !(i.routine && target.some((t) => t.routine && t.text === i.text)));
         target.push(...moving.map((i) => ({ ...i, id: uid() })));
-        S.todos[dt] = list(dt).filter((i) => i.done);
-        await Promise.all([saveTodos(dt), saveTodos(nx)]); toast(`Moved ${moving.length} item${moving.length === 1 ? '' : 's'} to ${fmtDate(nx)}`); return rerender();
+        S.todos[dt] = list(dt).filter((i) => i.done || i.routine);
+        await Promise.all([saveTodos(dt), saveTodos(nx)]); toast(`Moved ${moving.length} item${moving.length === 1 ? '' : 's'} to tomorrow`); return rerender();
       }
       case 'rt-add': {
         const box = b.closest('.todo-add'), text = $('.ta-text', box).value.trim();
         if (!text) return $('.ta-text', box).focus();
-        S.todoRoutine.push({ id: uid(), text, tag: $('.ta-tag', box).value, time: $('.ta-time', box).value, days: [] });
-        await saveRoutine(); return rerender('[data-routine-add] .ta-text');
+        const r = { id: uid(), text, tag: $('.ta-tag', box).value, time: '', days: [] };
+        S.todoRoutine.push(r); await saveRoutine(); await applyRoutineToOpenDays(null, r);
+        return rerender('[data-routine-add] .ta-text');
       }
       case 'rt-edit': todoEdit = { kind: 'routine', id: b.dataset.routine }; await rerender(); return $('.todo-edit .te-text')?.focus();
       case 'rt-up': { const i = S.todoRoutine.findIndex((r) => r.id === b.dataset.routine); move(S.todoRoutine, i, i - 1); await saveRoutine(); return rerender(); }
-      case 'rt-del': S.todoRoutine = S.todoRoutine.filter((r) => r.id !== b.dataset.routine); await saveRoutine(); return rerender();
+      case 'rt-del': {
+        const r = S.todoRoutine.find((x) => x.id === b.dataset.routine);
+        S.todoRoutine = S.todoRoutine.filter((x) => x !== r); await saveRoutine(); await applyRoutineToOpenDays(r.text, null);
+        return rerender();
+      }
       case 'cat-color': S.todoCats.find((c) => c.id === b.dataset.cat).color = b.dataset.color; await saveCats(); return rerender();
       case 'cat-add': {
         const name = $('#cat-new').value.trim();
@@ -272,9 +335,11 @@ async function todoDashboardCard(el) {
   el.innerHTML = `<div class="card"><div class="row between"><h2 style="margin:0">Today's to-do</h2><a href="#todo">Open</a></div>
     ${items.length ? `<div class="muted" style="font-size:13px;margin-top:4px">${done} of ${items.length} done</div>
       <div class="meter" style="margin:8px 0 10px"><div style="width:${(done / items.length) * 100}%"></div></div>
-      ${left.length ? `<ul class="todo-mini">${left.slice(0, 6).map((i) => `<li><label><input type="checkbox" data-mini="${i.id}">${i.time ? `<span class="todo-time">${esc(i.time)}</span>` : ''}${esc(i.text)}</label>${catChip(i.tag)}</li>`).join('')}</ul>${left.length > 6 ? `<div class="muted" style="font-size:12px">+${left.length - 6} more</div>` : ''}` : '<p style="margin:0">All done for today ✓</p>'}`
+      ${left.length ? `<ul class="todo-mini">${left.slice(0, 6).map((i) => `<li><label><input type="checkbox" data-mini="${i.id}">${i.time ? `<span class="todo-time">${esc(i.time)}</span>` : ''}${esc(i.text)}</label></li>`).join('')}</ul>${left.length > 6 ? `<div class="muted" style="font-size:12px">+${left.length - 6} more</div>` : ''}` : '<p style="margin:0">All done for today ✓</p>'}`
       : '<p class="muted" style="margin:8px 0 0">No list for today. <a href="#todo">Add some items</a>.</p>'}</div>`;
   $$('[data-mini]', el).forEach((b) => (b.onchange = async () => {
-    items.find((i) => i.id === b.dataset.mini).done = true; await saveTodos(today()); todoDashboardCard(el);
+    const it = items.find((i) => i.id === b.dataset.mini);
+    if (it) { it.done = true; await saveTodos(today()); }
+    todoDashboardCard(el);
   }));
 }
