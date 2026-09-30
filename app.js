@@ -217,6 +217,7 @@ async function load() {
   S.account = await DB.getMeta('account', 'live');
   S.marketGroup = await DB.getMeta('marketGroup', 'all');
   S.avKey = await DB.getMeta('avKey', '');
+  S.tdKey = await DB.getMeta('tdKey', '');
   S.events = await DB.getMeta('events', []);
   S.todos = null; S.todoRoutine = null; S.todoCats = null; // reloaded on demand by todo.js
   S.mistakes = await DB.getMeta('mistakes', null);
@@ -291,6 +292,7 @@ function viewDashboard() {
 
     ${compareAccounts(period)}
     ${reviewNotice()}
+    <div id="dash-live" style="margin-top:16px"></div>
     <div id="dash-todo" style="margin-top:16px"></div>
     <div class="section-title">Performance</div>
     <div class="grid g4">
@@ -343,6 +345,7 @@ function viewDashboard() {
   `;
   $$('[data-period]').forEach((c) => (c.onclick = () => { sessionStorage.setItem('period', c.dataset.period); viewDashboard(); }));
   todoDashboardCard($('#dash-todo'));
+  Live.start($('#dash-live'), T().filter(isOpen));
   $('#new-trade').onclick = () => go('trade', 'new');
   bindTradeRows();
   let cum = 0;
@@ -396,7 +399,7 @@ function tradeRow(t, compact, hideDate = compact) {
     <td><b>${esc(t.instrument || '—')}</b> <span class="dir ${t.direction === 'Short' ? 'short' : 'long'}">${esc(t.direction || '')}</span>${t.needsReview ? ' <span class="tag review-tag">Needs review</span>' : ''}${t.images?.length ? ' <span title="Has screenshots">📷</span>' : ''}
       <br><span class="muted" style="font-size:12px">${esc(t.market || '')}${t.market === 'Options' && optionLabel(t) ? ' · ' + esc(optionLabel(t)) : ''}</span></td>
     ${compact ? '' : `<td>${esc(t.setup || '')}</td>`}
-    ${isOpen(t) ? '<td class="num"><span class="tag open-tag">Open</span></td><td class="num muted">—</td>' : `<td class="num ${cls(r)}">${fmtR(r)}${tradePips(t) !== null ? `<br><span class="muted" style="font-size:12px">${fmtPips(tradePips(t))}</span>` : ''}</td>
+    ${isOpen(t) ? (() => { const lp = Live.peek(t); return `<td class="num"><span class="tag open-tag">Open</span>${lp?.r != null ? `<br><span class="${cls(lp.r)}" style="font-size:12px">${fmtR(lp.r)} now</span>` : ''}</td><td class="num ${cls(lp?.usd)}">${lp?.usd != null ? fmtMoney(lp.usd) : '—'}</td>`; })() : `<td class="num ${cls(r)}">${fmtR(r)}${tradePips(t) !== null ? `<br><span class="muted" style="font-size:12px">${fmtPips(tradePips(t))}</span>` : ''}</td>
     <td class="num ${cls(num(t.pnl))}">${fmtMoney(num(t.pnl))}</td>`}
     <td>${checks.length ? `${ok}/${checks.length}${ok < checks.length ? ' <span class="tag bad">broken</span>' : ''}` : '<span class="muted">—</span>'}</td>
     ${compact ? '' : `<td>${(t.mistakes || []).map((m) => `<span class="tag bad">${esc(m)}</span>`).join('')}</td><td>${esc(t.grade || '')}</td>`}
@@ -1132,6 +1135,11 @@ function viewSettings() {
         <label class="f">Extra tickers to watch<input type="text" id="watchTickers" value="${esc(s.watchTickers || '')}" placeholder="e.g. NVDA, MSFT, SPY"><span class="hint">Stocks you trade are added automatically</span></label>
         <div><button class="btn primary" id="save-cal">Save calendar settings</button></div>
       </div>
+      <div class="card grid"><h2>Live prices</h2>
+        <p class="muted" style="margin:0">Shows whether your open trades are winning or losing right now. Get a free key at twelvedata.com (Sign up → API key). Like your other keys, it stays on this device.</p>
+        <label class="f">Twelve Data API key<input type="password" id="tdKey" value="${esc(S.tdKey || '')}" autocomplete="off"></label>
+        <div><button class="btn primary" id="save-td">Save key</button></div>
+      </div>
       <div class="card grid"><h2>App version</h2>
         <p class="muted" style="margin:0">Version ${APP_VERSION}. The app checks for a newer version each time you open it. If something looks out of date, tap below.</p>
         <div><button class="btn" id="check-update">Check for updates</button> <button class="btn" id="force-update">Reload latest version</button></div>
@@ -1148,6 +1156,7 @@ function viewSettings() {
     </div>`;
   renderSyncCard();
   $('#check-update').onclick = () => checkForUpdate(true);
+  $('#save-td').onclick = async () => { S.tdKey = $('#tdKey').value.trim(); await DB.setMeta('tdKey', S.tdKey); toast(S.tdKey ? 'Live prices key saved' : 'Live prices key removed'); };
   $('#force-update').onclick = applyUpdate;
   $('#save-s').onclick = async () => {
     S.settings = { ...S.settings, currency: ($('#currency').value || 'USD').toUpperCase(), accountSize: num($('#accountSize').value), paperAccountSize: num($('#paperAccountSize').value), riskPct: num($('#riskPct').value), theme: $('#theme').value };
@@ -1247,7 +1256,7 @@ function renderSyncPill(st) {
 // ---------- app updates ----------
 // Bump APP_VERSION (and version.json, and the ?v= in index.html) with every release. The installed app compares
 // itself to version.json, which is always fetched fresh, and offers a one-tap update that clears the saved copy.
-const APP_VERSION = '2026-09-30.4';
+const APP_VERSION = '2026-09-30.6';
 async function checkForUpdate(manual = false) {
   if (location.protocol !== 'https:') { if (manual) toast('Updates apply to the online app only'); return; }
   try {

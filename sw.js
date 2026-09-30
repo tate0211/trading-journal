@@ -1,8 +1,8 @@
 // Service worker: keeps the app's own files available offline.
 // Network first, so a new version on GitHub Pages shows up on the next open; the cache is only a fallback.
-const CACHE = 'trading-journal-v7';
+const CACHE = 'trading-journal-v9';
 const SHELL = [
-  './', 'index.html', 'styles.css', 'db.js', 'charts.js', 'coach.js', 'notes.js', 'calendar.js', 'news.js', 'todo.js', 'sync.js', 'app.js',
+  './', 'index.html', 'styles.css', 'db.js', 'charts.js', 'coach.js', 'notes.js', 'calendar.js', 'news.js', 'todo.js', 'sync.js', 'live.js', 'app.js',
   'icon.svg', 'manifest.webmanifest', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-512-rounded.png',
 ];
 
