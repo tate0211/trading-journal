@@ -1132,6 +1132,10 @@ function viewSettings() {
         <label class="f">Extra tickers to watch<input type="text" id="watchTickers" value="${esc(s.watchTickers || '')}" placeholder="e.g. NVDA, MSFT, SPY"><span class="hint">Stocks you trade are added automatically</span></label>
         <div><button class="btn primary" id="save-cal">Save calendar settings</button></div>
       </div>
+      <div class="card grid"><h2>App version</h2>
+        <p class="muted" style="margin:0">Version ${APP_VERSION}. The app checks for a newer version each time you open it. If something looks out of date, tap below.</p>
+        <div><button class="btn" id="check-update">Check for updates</button> <button class="btn" id="force-update">Reload latest version</button></div>
+      </div>
       <div class="card grid"><h2>Backup</h2>
         <p class="muted" style="margin:0">Export everything (trades, screenshots, journal, rules, reviews) to one file. Import merges a backup back in.</p>
         <div class="row"><button class="btn" id="export">Export backup</button><button class="btn" id="import">Import backup</button><input type="file" id="import-file" accept="application/json" hidden></div>
@@ -1143,6 +1147,8 @@ function viewSettings() {
       </div>
     </div>`;
   renderSyncCard();
+  $('#check-update').onclick = () => checkForUpdate(true);
+  $('#force-update').onclick = applyUpdate;
   $('#save-s').onclick = async () => {
     S.settings = { ...S.settings, currency: ($('#currency').value || 'USD').toUpperCase(), accountSize: num($('#accountSize').value), paperAccountSize: num($('#paperAccountSize').value), riskPct: num($('#riskPct').value), theme: $('#theme').value };
     await DB.setMeta('settings', S.settings); applyTheme(); toast('Settings saved');
@@ -1238,6 +1244,36 @@ function renderSyncPill(st) {
   if (location.hash.startsWith('#settings') && !$('#sync-card')?.contains(document.activeElement)) renderSyncCard();
 }
 
+// ---------- app updates ----------
+// Bump APP_VERSION (and version.json, and the ?v= in index.html) with every release. The installed app compares
+// itself to version.json, which is always fetched fresh, and offers a one-tap update that clears the saved copy.
+const APP_VERSION = '2026-09-30.3';
+async function checkForUpdate(manual = false) {
+  if (location.protocol !== 'https:') { if (manual) toast('Updates apply to the online app only'); return; }
+  try {
+    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    const { version } = await res.json();
+    if (version && version !== APP_VERSION) showUpdateBanner();
+    else if (manual) toast('You have the latest version');
+  } catch { if (manual) toast("Couldn't check for updates. Are you online?"); }
+}
+function showUpdateBanner() {
+  if ($('#update-banner')) return;
+  const bar = document.createElement('div');
+  bar.id = 'update-banner'; bar.className = 'update-banner';
+  bar.innerHTML = '<span>A new version of your journal is ready.</span><button class="btn small primary">Update now</button>';
+  bar.querySelector('button').onclick = applyUpdate;
+  $('header.topbar').appendChild(bar);
+}
+async function applyUpdate() {
+  try {
+    for (const r of (await navigator.serviceWorker?.getRegistrations?.()) || []) await r.unregister();
+    for (const k of await caches.keys()) await caches.delete(k);
+  } catch { /* nothing cached */ }
+  location.replace(location.pathname + '?v=' + Date.now() + location.hash);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
+
 // ---------- start ----------
 window.addEventListener('hashchange', route);
 document.addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (b) { moreSheet(false); go(b.dataset.go); } });
@@ -1252,6 +1288,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#mor
 $('#sync-pill').onclick = () => go('settings');
 load().then(async () => {
   route();
+  checkForUpdate();
   Sync.onStatus(renderSyncPill);
   await Sync.init();
 }).catch((err) => {

@@ -639,3 +639,10 @@ main { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .todo-simple .todo-item input[type=checkbox] { width: 22px; height: 22px; }
 .todo-add.simple { flex-wrap: nowrap; }
 .todo-add.simple .ta-text { flex: 1 1 auto; }
+
+/* ---- "new version ready" banner ---- */
+.update-banner {
+  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+  padding: 8px 16px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
+}
+.update-banner .btn { background: #fff; color: var(--accent); border-color: #fff; }

@@ -1,6 +1,6 @@
 // Service worker: keeps the app's own files available offline.
 // Network first, so a new version on GitHub Pages shows up on the next open; the cache is only a fallback.
-const CACHE = 'trading-journal-v4';
+const CACHE = 'trading-journal-v6';
 const SHELL = [
   './', 'index.html', 'styles.css', 'db.js', 'charts.js', 'coach.js', 'notes.js', 'calendar.js', 'news.js', 'todo.js', 'sync.js', 'app.js',
   'icon.svg', 'manifest.webmanifest', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-512-rounded.png',
@@ -17,7 +17,8 @@ self.addEventListener('fetch', (e) => {
   // Only the app's own files. API calls (Supabase, Anthropic, WSJ, TradingView…) go straight to the network.
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    // cache: 'no-cache' asks GitHub whether the file changed, so updates appear on the next open instead of up to 10 minutes later.
+    fetch(e.request, { cache: 'no-cache' })
       .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return res; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match('index.html'))),
   );
