@@ -733,3 +733,9 @@ main { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
   .home .todo-mini input { width: 20px; height: 20px; }
 }
 @media (max-width: 700px) { .banner-more { display: none; } .acct-banner, .topbar .acct-banner { padding: 4px 14px; text-align: center; } }
+.home-recent { display: flex; flex-direction: column; margin-top: 10px; }
+.home-trade {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 2px; text-align: left;
+  background: none; border: 0; border-bottom: 1px solid var(--border); font: inherit; color: inherit; cursor: pointer;
+}
+.home-trade:last-child { border-bottom: 0; }

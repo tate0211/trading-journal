@@ -288,6 +288,8 @@ function viewHome() {
   const now = new Date(), h = now.getHours();
   const greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
   const week = stats(T().filter((t) => t.date >= weekStart(today())));
+  const all = stats(T());
+  const recent = sortTrades(T()).reverse().slice(0, 5);
   const open = T().filter(isOpen);
   const j = S.journal.find((x) => x.id === today());
   const planned = !!(j?.plan?.plan || j?.plan?.bias), reviewed = !!(j?.review?.good || j?.review?.bad || j?.review?.tomorrow);
@@ -309,16 +311,24 @@ function viewHome() {
     <div id="home-todo"></div>
     <div id="home-live"></div>
     <button class="card home-week" data-go="stats">
-      <div class="row between"><h2 style="margin:0">This week</h2><span class="home-link">Full stats ›</span></div>
+      <div class="row between"><h2 style="margin:0">${S.account === 'paper' ? 'Paper trading' : 'Real money'}${S.marketGroup !== 'all' ? ` · ${MARKET_GROUPS[S.marketGroup]}` : ''}</h2><span class="home-link">Full stats ›</span></div>
       <div class="home-stats">
-        <div><b class="${cls(week.totalR)}">${week.n ? fmtR(week.totalR) : '—'}</b><span>Net result</span></div>
-        <div><b>${week.winRate === null ? '—' : Math.round(week.winRate * 100) + '%'}</b><span>Win rate</span></div>
-        <div><b>${week.n + week.openN}</b><span>Trades${week.openN ? ` · ${week.openN} open` : ''}</span></div>
+        <div><b class="${cls(all.totalR)}">${all.n ? fmtR(all.totalR) : '—'}</b><span>Net result</span></div>
+        <div><b>${all.winRate === null ? '—' : Math.round(all.winRate * 100) + '%'}</b><span>Win rate</span></div>
+        <div><b>${all.n + all.openN}</b><span>Trades${all.openN ? ` · ${all.openN} open` : ''}</span></div>
       </div>
+      <div class="muted" style="font-size:13px;margin-top:10px">This week: ${week.n + week.openN ? `${week.n + week.openN} trade${week.n + week.openN > 1 ? 's' : ''}${week.n ? ` · <span class="${cls(week.totalR)}">${fmtR(week.totalR)}</span>` : ''}` : 'no trades yet'}</div>
     </button>
+    ${recent.length ? `<div class="card"><div class="row between"><h2 style="margin:0">Recent trades</h2><a href="#trades" class="home-link">See all ›</a></div>
+      <div class="home-recent">${recent.map((t) => `<button class="home-trade" data-trade="${t.id}">
+        <span><b>${esc(t.instrument)}</b> <span class="dir ${t.direction === 'Short' ? 'short' : 'long'}">${esc(t.direction)}</span><br><span class="muted" style="font-size:12px">${fmtDate(t.date)}</span></span>
+        ${isOpen(t) ? '<span class="tag open-tag">Open</span>' : `<span style="text-align:right"><b class="${cls(tradeR(t))}">${fmtR(tradeR(t))}</b><br><span class="${cls(num(t.pnl))}" style="font-size:12px">${fmtMoney(num(t.pnl))}</span></span>`}
+      </button>`).join('')}</div></div>`
+    : `<div class="card"><h2 style="margin:0 0 6px">No ${S.account === 'paper' ? 'paper' : 'real-money'} trades here yet</h2><p class="muted" style="margin:0">${S.trades.length ? `You have ${S.trades.length} trade${S.trades.length > 1 ? 's' : ''} in total. Check the <b>Real money / Paper</b> switch at the top and the <b>Markets</b> filter in More.` : 'Tap ＋ to log your first trade.'}</p></div>`}
     <div class="home-tiles">${tiles}</div>
   </div>`;
   $('[data-act="log"]').onclick = () => go('trade', 'new');
+  bindTradeRows();
   todoDashboardCard($('#home-todo'));
   Live.start($('#home-live'), open);
 }
@@ -1317,7 +1327,7 @@ function renderSyncPill(st) {
 // ---------- app updates ----------
 // Bump APP_VERSION (and version.json, and the ?v= in index.html) with every release. The installed app compares
 // itself to version.json, which is always fetched fresh, and offers a one-tap update that clears the saved copy.
-const APP_VERSION = '2026-10-06.1';
+const APP_VERSION = '2026-10-06.2';
 async function checkForUpdate(manual = false) {
   if (location.protocol !== 'https:') { if (manual) toast('Updates apply to the online app only'); return; }
   try {
