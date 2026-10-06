@@ -5,8 +5,8 @@ const DB = (() => {
   const VERSION = 2; // v2 adds the 'notes' store (GoodNotes exports)
   const STORES = ['trades', 'journal', 'weekly', 'rules', 'coach', 'notes', 'meta'];
   // Meta keys that belong to this device only (never synced). NOT_IN_BACKUP: also left out of backup files.
-  const LOCAL_ONLY = ['apiKey', 'avKey', 'tdKey', 'earnings', 'syncQueue', 'syncState', 'syncConfig', 'account', 'marketGroup', 'inputMode', 'rulesSeeded'];
-  const NOT_IN_BACKUP = ['apiKey', 'avKey', 'tdKey', 'earnings', 'syncQueue', 'syncState', 'syncConfig'];
+  const LOCAL_ONLY = ['apiKey', 'avKey', 'tdKey', 'layout', 'earnings', 'syncQueue', 'syncState', 'syncConfig', 'account', 'marketGroup', 'inputMode', 'rulesSeeded'];
+  const NOT_IN_BACKUP = ['apiKey', 'avKey', 'tdKey', 'layout', 'earnings', 'syncQueue', 'syncState', 'syncConfig'];
   let dbPromise;
   let onChange = null; // set by Sync: (store, id, deleted) => void
 

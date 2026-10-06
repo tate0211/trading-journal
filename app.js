@@ -218,6 +218,8 @@ async function load() {
   S.marketGroup = await DB.getMeta('marketGroup', 'all');
   S.avKey = await DB.getMeta('avKey', '');
   S.tdKey = await DB.getMeta('tdKey', '');
+  // Which sections this device shows. Phones start without Calendar and News.
+  S.layout = (await DB.getMeta('layout', null)) || { hidden: isPhone() ? ['calendar', 'news'] : [] };
   S.events = await DB.getMeta('events', []);
   S.todos = null; S.todoRoutine = null; S.todoCats = null; // reloaded on demand by todo.js
   S.mistakes = await DB.getMeta('mistakes', null);
@@ -233,7 +235,7 @@ async function load() {
     if (S.rules.some((o) => o !== r && o._ts !== 0 && o.text === r.text)) { await DB.del('rules', r.id, { remote: true }); S.rules = S.rules.filter((x) => x !== r); }
   }
   S.rules.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  applyTheme(); applyAccount();
+  applyTheme(); applyAccount(); applyLayout();
 }
 function applyAccount() {
   $$('#acct button, #acct-m button').forEach((b) => b.classList.toggle('on', b.dataset.acct === S.account));
@@ -257,12 +259,12 @@ function applyTheme() {
 const allSetups = () => [...new Set(S.trades.map((t) => t.setup).filter(Boolean))].sort();
 
 // ---------- routing ----------
-const VIEWS = { dashboard: viewDashboard, trades: viewTrades, trade: viewTradeForm, journal: viewJournal, weekly: viewWeekly, rules: viewRules, coach: viewCoach, settings: viewSettings, notes: viewNotes, calendar: viewCalendar, news: viewNews, todo: viewTodo };
+const VIEWS = { dashboard: viewDashboard, stats: () => viewDashboard('full'), trades: viewTrades, trade: viewTradeForm, journal: viewJournal, weekly: viewWeekly, rules: viewRules, coach: viewCoach, settings: viewSettings, notes: viewNotes, calendar: viewCalendar, news: viewNews, todo: viewTodo };
 function go(view, arg) { location.hash = arg ? `${view}/${arg}` : view; }
 function route() {
   const [view, arg] = (location.hash.slice(1) || 'dashboard').split('/');
   const fn = VIEWS[view] || viewDashboard;
-  const current = view === 'trade' ? 'trades' : view || 'dashboard';
+  const current = view === 'trade' ? 'trades' : view === 'stats' ? 'dashboard' : view || 'dashboard';
   $$('nav [data-go], .sheet-list [data-go]').forEach((b) => b.classList.toggle('active', b.dataset.go === current));
   // On phones, pages reached through "More" light up the More tab.
   $('#tab-more')?.classList.toggle('active', !!$(`.sheet-list [data-go="${current}"]`));
@@ -271,8 +273,59 @@ function route() {
   fn(arg ? decodeURIComponent(arg) : undefined);
 }
 
+// ---------- phone Home & layout ----------
+const isPhone = () => matchMedia('(max-width: 700px)').matches;
+// Sections that can be hidden per device (Home, Trades, To-do and Settings always stay).
+const OPTIONAL_SECTIONS = [['journal', 'Daily journal'], ['weekly', 'Weekly review'], ['calendar', 'Calendar'], ['news', 'News'],
+  ['rules', 'Rules and mistakes'], ['notes', 'GoodNotes'], ['coach', 'AI coach']];
+const shown = (view) => !S.layout?.hidden?.includes(view);
+function applyLayout() {
+  $$('nav [data-go], .sheet-list [data-go]').forEach((b) => (b.hidden = !shown(b.dataset.go)));
+}
+
+// "Today at a glance": what a phone shows when you open the app.
+function viewHome() {
+  const now = new Date(), h = now.getHours();
+  const greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  const week = stats(T().filter((t) => t.date >= weekStart(today())));
+  const open = T().filter(isOpen);
+  const j = S.journal.find((x) => x.id === today());
+  const planned = !!(j?.plan?.plan || j?.plan?.bias), reviewed = !!(j?.review?.good || j?.review?.bad || j?.review?.tomorrow);
+  const toReview = T().filter((t) => t.needsReview || (!isOpen(t) && !isReviewed(t))).length;
+  const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
+  const tile = (go, color, svg, title, sub) => `<button class="home-tile" ${go} style="--tile:${color}"><span class="tile-icon">${icon(svg)}</span><b>${title}</b><span>${sub}</span></button>`;
+  const tiles = [
+    tile('data-act="log"', 'var(--accent)', 'M12 5v14M5 12h14', 'Log a trade', 'Add it while it\'s fresh'),
+    shown('journal') && tile('data-go="journal"', '#1baf7a', 'M6 4h10l3 3v13H6zM9 10h7M9 14h7M9 18h4', 'Daily journal', h < 15 ? (planned ? 'Plan written ✓' : 'Write today\'s plan') : (reviewed ? 'Day reviewed ✓' : 'Review your day')),
+    tile('data-go="trades"', '#eb6834', 'M4 18l5-6 4 3 7-9M15 6h5v5', 'Trades', toReview ? `${toReview} to review` : `${T().length} logged`),
+    shown('weekly') && tile('data-go="weekly"', '#7b6fd6', 'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4', 'Weekly review', 'Look back on the week'),
+  ].filter(Boolean).join('');
+
+  main().innerHTML = `<div class="home">
+    <div class="home-hello">
+      <div class="muted">${now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+      <h1>${greet}</h1>
+    </div>
+    <div id="home-todo"></div>
+    <div id="home-live"></div>
+    <button class="card home-week" data-go="stats">
+      <div class="row between"><h2 style="margin:0">This week</h2><span class="home-link">Full stats ›</span></div>
+      <div class="home-stats">
+        <div><b class="${cls(week.totalR)}">${week.n ? fmtR(week.totalR) : '—'}</b><span>Net result</span></div>
+        <div><b>${week.winRate === null ? '—' : Math.round(week.winRate * 100) + '%'}</b><span>Win rate</span></div>
+        <div><b>${week.n + week.openN}</b><span>Trades${week.openN ? ` · ${week.openN} open` : ''}</span></div>
+      </div>
+    </button>
+    <div class="home-tiles">${tiles}</div>
+  </div>`;
+  $('[data-act="log"]').onclick = () => go('trade', 'new');
+  todoDashboardCard($('#home-todo'));
+  Live.start($('#home-live'), open);
+}
+
 // ---------- dashboard ----------
-function viewDashboard() {
+function viewDashboard(arg) {
+  if (isPhone() && arg !== 'full') return viewHome(); // phones get the simpler Home screen; full stats are one tap away
   const period = +(sessionStorage.getItem('period') || 30);
   const st = stats(periodTrades(period));
   const todayTrades = T().filter((t) => t.date === today());
@@ -343,7 +396,7 @@ function viewDashboard() {
       <div class="card"><h2>By emotion before entry</h2>${breakdownTable([...st.byEmotion].reverse(), 'Emotion')}</div>
     </div>
   `;
-  $$('[data-period]').forEach((c) => (c.onclick = () => { sessionStorage.setItem('period', c.dataset.period); viewDashboard(); }));
+  $$('[data-period]').forEach((c) => (c.onclick = () => { sessionStorage.setItem('period', c.dataset.period); viewDashboard(arg); }));
   todoDashboardCard($('#dash-todo'));
   Live.start($('#dash-live'), T().filter(isOpen));
   $('#new-trade').onclick = () => go('trade', 'new');
@@ -1135,6 +1188,10 @@ function viewSettings() {
         <label class="f">Extra tickers to watch<input type="text" id="watchTickers" value="${esc(s.watchTickers || '')}" placeholder="e.g. NVDA, MSFT, SPY"><span class="hint">Stocks you trade are added automatically</span></label>
         <div><button class="btn primary" id="save-cal">Save calendar settings</button></div>
       </div>
+      <div class="card grid"><h2>Customize app${isPhone() ? ' (this phone)' : ' (this device)'}</h2>
+        <p class="muted" style="margin:0">Choose which sections appear in the menus on this device. Hidden sections keep their data, so you can turn them back on any time. Home, Trades and To-do always stay.</p>
+        <div class="checklist">${OPTIONAL_SECTIONS.map(([v, label]) => `<label class="check"><input type="checkbox" data-section="${v}" ${shown(v) ? 'checked' : ''}> <span>${label}</span></label>`).join('')}</div>
+      </div>
       <div class="card grid"><h2>Live prices</h2>
         <p class="muted" style="margin:0">Shows whether your open trades are winning or losing right now. Get a free key at twelvedata.com (Sign up → API key). Like your other keys, it stays on this device.</p>
         <label class="f">Twelve Data API key<input type="password" id="tdKey" value="${esc(S.tdKey || '')}" autocomplete="off"></label>
@@ -1155,6 +1212,10 @@ function viewSettings() {
       </div>
     </div>`;
   renderSyncCard();
+  $$('[data-section]').forEach((b) => (b.onchange = async () => {
+    S.layout = { ...S.layout, hidden: $$('[data-section]').filter((x) => !x.checked).map((x) => x.dataset.section) };
+    await DB.setMeta('layout', S.layout); applyLayout(); toast(b.checked ? 'Section shown' : 'Section hidden');
+  }));
   $('#check-update').onclick = () => checkForUpdate(true);
   $('#save-td').onclick = async () => { S.tdKey = $('#tdKey').value.trim(); await DB.setMeta('tdKey', S.tdKey); toast(S.tdKey ? 'Live prices key saved' : 'Live prices key removed'); };
   $('#force-update').onclick = applyUpdate;
@@ -1256,7 +1317,7 @@ function renderSyncPill(st) {
 // ---------- app updates ----------
 // Bump APP_VERSION (and version.json, and the ?v= in index.html) with every release. The installed app compares
 // itself to version.json, which is always fetched fresh, and offers a one-tap update that clears the saved copy.
-const APP_VERSION = '2026-09-30.6';
+const APP_VERSION = '2026-10-06.1';
 async function checkForUpdate(manual = false) {
   if (location.protocol !== 'https:') { if (manual) toast('Updates apply to the online app only'); return; }
   try {

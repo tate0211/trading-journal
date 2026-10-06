@@ -18,11 +18,17 @@ const Live = (() => {
     return s;
   }
 
+  // Twelve Data's own messages are long and technical; say plainly what to do.
+  const friendly = (msg = '') => (/apikey/i.test(msg)
+    ? "Twelve Data didn't accept your key. In Settings → Live prices, paste it again using the copy button on twelvedata.com → Dashboard → API Keys."
+    : /run out of API credits|limit/i.test(msg) ? 'Free-plan limit reached for now. Prices will update again in a minute (or tomorrow if the daily 800 are used up).'
+    : msg);
+
   async function fetchOne(sym, key) {
     try {
       const data = await (await fetch(`${API}?symbol=${encodeURIComponent(sym)}&apikey=${encodeURIComponent(key)}`)).json();
       if (data.price) prices[sym] = { price: parseFloat(data.price), at: Date.now() };
-      else lastError = `${sym}: ${data.message || 'no price available'}`;
+      else lastError = /apikey/i.test(data.message) ? friendly(data.message) : `${sym}: ${friendly(data.message) || 'no price available'}`;
     } catch { lastError = "Couldn't reach Twelve Data. Are you online?"; }
   }
 
@@ -39,13 +45,13 @@ const Live = (() => {
         if (data.status === 'error' && !data.price) {
           // One unknown symbol can fail the whole request; try each on its own so the rest still show.
           if (batch.length > 1) { for (const sym of batch) await fetchOne(sym, key); continue; }
-          lastError = data.message || 'Twelve Data returned an error.'; continue;
+          lastError = friendly(data.message) || 'Twelve Data returned an error.'; continue;
         }
         const map = batch.length === 1 ? { [batch[0]]: data } : data;
         for (const sym of batch) {
           const row = map[sym];
           if (row && row.price) prices[sym] = { price: parseFloat(row.price), at: Date.now() };
-          else if (row?.message && !lastError) lastError = `${sym}: ${row.message}`;
+          else if (row?.message && !lastError) lastError = /apikey/i.test(row.message) ? friendly(row.message) : `${sym}: ${friendly(row.message)}`;
         }
       } catch { lastError = "Couldn't reach Twelve Data. Are you online?"; }
     }
