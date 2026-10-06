@@ -283,23 +283,27 @@ function applyLayout() {
   $$('nav [data-go], .sheet-list [data-go]').forEach((b) => (b.hidden = !shown(b.dataset.go)));
 }
 
-// "Today at a glance": what a phone shows when you open the app.
+// "Today at a glance": what a phone shows when you open the app. Kept short on purpose:
+// trading details live behind the big Trading button (the Trades page).
 function viewHome() {
   const now = new Date(), h = now.getHours();
   const greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-  const week = stats(T().filter((t) => t.date >= weekStart(today())));
   const all = stats(T());
-  const recent = sortTrades(T()).reverse().slice(0, 5);
-  const open = T().filter(isOpen);
   const j = S.journal.find((x) => x.id === today());
   const planned = !!(j?.plan?.plan || j?.plan?.bias), reviewed = !!(j?.review?.good || j?.review?.bad || j?.review?.tomorrow);
   const toReview = T().filter((t) => t.needsReview || (!isOpen(t) && !isReviewed(t))).length;
   const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
-  const tile = (go, color, svg, title, sub) => `<button class="home-tile" ${go} style="--tile:${color}"><span class="tile-icon">${icon(svg)}</span><b>${title}</b><span>${sub}</span></button>`;
+  const tile = (go, color, svg, title, sub, extra = '') => `<button class="home-tile ${extra}" ${go} style="--tile:${color}"><span class="tile-icon">${icon(svg)}</span><b>${title}</b><span>${sub}</span></button>`;
+  const tradingHint = [
+    `${S.account === 'paper' ? 'Paper' : 'Real money'}`,
+    all.openN ? `${all.openN} open` : null,
+    all.n ? fmtR(all.totalR) : null,
+    toReview ? `${toReview} to review` : null,
+  ].filter(Boolean).join(' · ');
   const tiles = [
+    tile('data-go="trades"', '#eb6834', 'M4 18l5-6 4 3 7-9M15 6h5v5', 'Trading', T().length ? tradingHint : `No ${S.account === 'paper' ? 'paper' : 'real-money'} trades yet`, 'wide'),
     tile('data-act="log"', 'var(--accent)', 'M12 5v14M5 12h14', 'Log a trade', 'Add it while it\'s fresh'),
     shown('journal') && tile('data-go="journal"', '#1baf7a', 'M6 4h10l3 3v13H6zM9 10h7M9 14h7M9 18h4', 'Daily journal', h < 15 ? (planned ? 'Plan written ✓' : 'Write today\'s plan') : (reviewed ? 'Day reviewed ✓' : 'Review your day')),
-    tile('data-go="trades"', '#eb6834', 'M4 18l5-6 4 3 7-9M15 6h5v5', 'Trades', toReview ? `${toReview} to review` : `${T().length} logged`),
     shown('weekly') && tile('data-go="weekly"', '#7b6fd6', 'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4', 'Weekly review', 'Look back on the week'),
   ].filter(Boolean).join('');
 
@@ -308,9 +312,17 @@ function viewHome() {
       <div class="muted">${now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
       <h1>${greet}</h1>
     </div>
+    <div class="home-tiles">${tiles}</div>
     <div id="home-todo"></div>
-    <div id="home-live"></div>
-    <button class="card home-week" data-go="stats">
+  </div>`;
+  $('[data-act="log"]').onclick = () => go('trade', 'new');
+  todoDashboardCard($('#home-todo'));
+}
+
+// Top of the Trades page on a phone: the account summary and live open positions.
+function tradingOverview() {
+  const all = stats(T()), week = stats(T().filter((t) => t.date >= weekStart(today())));
+  return `<button class="card home-week" data-go="stats" style="margin-bottom:14px">
       <div class="row between"><h2 style="margin:0">${S.account === 'paper' ? 'Paper trading' : 'Real money'}${S.marketGroup !== 'all' ? ` · ${MARKET_GROUPS[S.marketGroup]}` : ''}</h2><span class="home-link">Full stats ›</span></div>
       <div class="home-stats">
         <div><b class="${cls(all.totalR)}">${all.n ? fmtR(all.totalR) : '—'}</b><span>Net result</span></div>
@@ -319,18 +331,7 @@ function viewHome() {
       </div>
       <div class="muted" style="font-size:13px;margin-top:10px">This week: ${week.n + week.openN ? `${week.n + week.openN} trade${week.n + week.openN > 1 ? 's' : ''}${week.n ? ` · <span class="${cls(week.totalR)}">${fmtR(week.totalR)}</span>` : ''}` : 'no trades yet'}</div>
     </button>
-    ${recent.length ? `<div class="card"><div class="row between"><h2 style="margin:0">Recent trades</h2><a href="#trades" class="home-link">See all ›</a></div>
-      <div class="home-recent">${recent.map((t) => `<button class="home-trade" data-trade="${t.id}">
-        <span><b>${esc(t.instrument)}</b> <span class="dir ${t.direction === 'Short' ? 'short' : 'long'}">${esc(t.direction)}</span><br><span class="muted" style="font-size:12px">${fmtDate(t.date)}</span></span>
-        ${isOpen(t) ? '<span class="tag open-tag">Open</span>' : `<span style="text-align:right"><b class="${cls(tradeR(t))}">${fmtR(tradeR(t))}</b><br><span class="${cls(num(t.pnl))}" style="font-size:12px">${fmtMoney(num(t.pnl))}</span></span>`}
-      </button>`).join('')}</div></div>`
-    : `<div class="card"><h2 style="margin:0 0 6px">No ${S.account === 'paper' ? 'paper' : 'real-money'} trades here yet</h2><p class="muted" style="margin:0">${S.trades.length ? `You have ${S.trades.length} trade${S.trades.length > 1 ? 's' : ''} in total. Check the <b>Real money / Paper</b> switch at the top and the <b>Markets</b> filter in More.` : 'Tap ＋ to log your first trade.'}</p></div>`}
-    <div class="home-tiles">${tiles}</div>
-  </div>`;
-  $('[data-act="log"]').onclick = () => go('trade', 'new');
-  bindTradeRows();
-  todoDashboardCard($('#home-todo'));
-  Live.start($('#home-live'), open);
+    <div id="trades-live" style="margin-bottom:14px"></div>`;
 }
 
 // ---------- dashboard ----------
@@ -501,6 +502,7 @@ function viewTrades() {
   main().innerHTML = `
     <div class="row between"><div><h1>Trades <span class="acct-pill ${S.account}">${ACCOUNTS[S.account]}</span>${marketPill()}</h1><p class="sub">${T().length} ${S.account === 'paper' ? 'paper' : 'real-money'} trades logged, grouped by day. Click a trade to open it.</p></div>
       <button class="btn primary" id="new-trade">+ Log trade</button></div>
+    ${isPhone() ? tradingOverview() : ''}
     <div class="card" style="margin-bottom:16px"><div class="grid g4">
       <label class="f">Search<input type="text" id="f-q" value="${esc(f.q || '')}" placeholder="Instrument, setup, notes…"></label>
       <label class="f">Market<select id="f-market"><option value="">All</option>${MARKETS.map((m) => `<option ${f.market === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
@@ -511,6 +513,7 @@ function viewTrades() {
     </div>
     <div class="card">${list.length ? tradeTable(list, false, true) : `<div class="empty">${T().length ? 'No trades match these filters.' : 'No trades yet. Log your first one.'}</div>`}</div>`;
   $('#new-trade').onclick = () => go('trade', 'new');
+  if ($('#trades-live')) Live.start($('#trades-live'), T().filter(isOpen));
   const save = () => {
     sessionStorage.setItem('tradeFilter', JSON.stringify({ q: $('#f-q').value, market: $('#f-market').value, result: $('#f-result').value, discipline: $('#f-disc').value }));
     viewTrades(); const i = $('#f-q'); i.focus(); i.setSelectionRange(i.value.length, i.value.length);
@@ -1327,7 +1330,7 @@ function renderSyncPill(st) {
 // ---------- app updates ----------
 // Bump APP_VERSION (and version.json, and the ?v= in index.html) with every release. The installed app compares
 // itself to version.json, which is always fetched fresh, and offers a one-tap update that clears the saved copy.
-const APP_VERSION = '2026-10-06.2';
+const APP_VERSION = '2026-10-06.3';
 async function checkForUpdate(manual = false) {
   if (location.protocol !== 'https:') { if (manual) toast('Updates apply to the online app only'); return; }
   try {

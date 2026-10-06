@@ -739,3 +739,7 @@ main { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
   background: none; border: 0; border-bottom: 1px solid var(--border); font: inherit; color: inherit; cursor: pointer;
 }
 .home-trade:last-child { border-bottom: 0; }
+.home-tile.wide { grid-column: 1 / -1; min-height: 96px; }
+.home-tile.wide b { font-size: 18px; }
+/* a tile left alone on the last row stretches across */
+.home-tiles > .home-tile:not(.wide):last-child:nth-child(even) { grid-column: 1 / -1; min-height: 88px; }
